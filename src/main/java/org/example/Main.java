@@ -279,17 +279,22 @@ public class Main extends Application {
 
         scores.setAlignment(Pos.CENTER);
 
-        for (int i = 1; i <= 10; i++) {
+        String[] highScores = {
+                "1. Player 1 - 10100",
+                "2. Player 2 - 9200",
+                "3. Player 3 - 8300",
+                "4. Player 4 - 7400",
+                "5. Player 5 - 6500",
+                "6. Player 6 - 5600",
+                "7. Player 7 - 4700",
+                "8. Player 8 - 3800",
+                "9. Player 9 - 2900",
+                "10. Player 10 - 2000"
+        };
 
-            Label score = new Label(
-                    i +
-                            ". Player " +
-                            i +
-                            " - " +
-                            (11000 - i * 900)
-            );
-
-            scores.getChildren().add(score);
+// Enhanced for loop
+        for (String scoreText : highScores) {
+            scores.getChildren().add(new Label(scoreText));
         }
 
         Button backButton =
