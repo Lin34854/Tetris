@@ -24,13 +24,22 @@ public class Main extends Application {
     private static final int COLS = 10;
     private static final int BLOCK = 30;
 
-    // Automatic drop interval: 700 ms
-    private static final long DROP_INTERVAL = 700_000_000L;
-
     private final int[][] board = new int[ROWS][COLS];
+
+    private GameConfig config =
+            new GameConfig(
+                    10,
+                    20,
+                    1,
+                    false,
+                    false,
+                    false,
+                    false
+            );
 
     private int[][] currentPiece;
     private int currentPieceType;
+    private Tetromino currentTetromino;
 
     private int pieceRow;
     private int pieceCol;
@@ -184,11 +193,23 @@ public class Main extends Application {
                         "-fx-font-weight: bold;"
         );
 
-        Label fieldSize =
-                new Label("Field Size: 10 x 20");
+        ComboBox<String> fieldSize =
+                new ComboBox<>();
+
+        fieldSize.getItems().addAll(
+                "10 x 20",
+                "12 x 24",
+                "15 x 30"
+        );
+
+        fieldSize.setValue(
+                config.fieldWidth() +
+                        " x " +
+                        config.fieldHeight()
+        );
 
         Slider levelSlider =
-                new Slider(1, 10, 1);
+                new Slider(1, 10, config.level());
 
         levelSlider.setShowTickLabels(true);
         levelSlider.setShowTickMarks(true);
@@ -199,7 +220,10 @@ public class Main extends Application {
         levelSlider.setPrefWidth(300);
 
         Label levelLabel =
-                new Label("Level: 1");
+                new Label(
+                        "Level: " +
+                                config.level()
+                );
 
         levelSlider.valueProperty()
                 .addListener(
@@ -228,18 +252,52 @@ public class Main extends Application {
         CheckBox extendedMode =
                 new CheckBox("Extended Mode");
 
+        music.setSelected(
+                config.musicEnabled()
+        );
+
+        sound.setSelected(
+                config.soundEnabled()
+        );
+
+        aiPlay.setSelected(
+                config.aiPlayEnabled()
+        );
+
+        extendedMode.setSelected(
+                config.extendedModeEnabled()
+        );
+
         Button backButton =
                 new Button("Back");
 
         backButton.setPrefWidth(150);
 
-        backButton.setOnAction(
-                e -> showMainMenu(stage)
-        );
+        backButton.setOnAction(e -> {
+
+            String[] fieldValues =
+                    fieldSize.getValue().split(" x ");
+
+            config =
+                    new GameConfig(
+                            Integer.parseInt(fieldValues[0]),
+                            Integer.parseInt(fieldValues[1]),
+                            (int) Math.round(
+                                    levelSlider.getValue()
+                            ),
+                            music.isSelected(),
+                            sound.isSelected(),
+                            aiPlay.isSelected(),
+                            extendedMode.isSelected()
+                    );
+
+            showMainMenu(stage);
+        });
 
         VBox root = new VBox(
                 15,
                 title,
+                new Label("Field Size"),
                 fieldSize,
                 levelLabel,
                 levelSlider,
@@ -465,12 +523,17 @@ public class Main extends Application {
                                     Math.min(
                                             1.0,
                                             (double) elapsed
-                                                    / DROP_INTERVAL
+                                                    / getDropInterval()
                                     );
 
-                            if (elapsed >= DROP_INTERVAL) {
+                            if (elapsed >= getDropInterval()) {
 
                                 pieceRow++;
+
+                                currentTetromino.setPosition(
+                                        pieceCol,
+                                        pieceRow
+                                );
 
                                 smoothOffset = 0;
 
@@ -486,7 +549,7 @@ public class Main extends Application {
                              */
                             smoothOffset = 0;
 
-                            if (elapsed >= DROP_INTERVAL) {
+                            if (elapsed >= getDropInterval()) {
 
                                 lockPiece();
 
@@ -503,6 +566,13 @@ public class Main extends Application {
                 };
 
         gameTimer.start();
+    }
+
+    private long getDropInterval() {
+
+        return 800_000_000L -
+                (config.level() - 1) *
+                        70_000_000L;
     }
 
     // =====================================================
@@ -568,6 +638,15 @@ public class Main extends Application {
                 COLS / 2 -
                         currentPiece[0].length / 2;
 
+        currentTetromino =
+                new Tetromino(
+                        pieceCol,
+                        pieceRow,
+                        currentPiece,
+                        getPieceColor(currentPieceType),
+                        BLOCK
+                );
+
         smoothOffset = 0;
         lastDropTime = 0;
 
@@ -603,6 +682,11 @@ public class Main extends Application {
         )) {
 
             pieceCol = newCol;
+
+            currentTetromino.setPosition(
+                    pieceCol,
+                    pieceRow
+            );
         }
     }
 
@@ -619,6 +703,11 @@ public class Main extends Application {
         )) {
 
             pieceRow++;
+
+            currentTetromino.setPosition(
+                    pieceCol,
+                    pieceRow
+            );
 
             smoothOffset = 0;
 
@@ -665,6 +754,10 @@ public class Main extends Application {
         )) {
 
             currentPiece = rotated;
+
+            currentTetromino.setShape(
+                    currentPiece
+            );
         }
     }
 
@@ -909,63 +1002,15 @@ public class Main extends Application {
 
         // Draw the current falling tetromino
         if (
-                currentPiece != null &&
+                currentTetromino != null &&
                         !gameOver
         ) {
 
-            gc.setFill(
-                    getPieceColor(
-                            currentPieceType
-                    )
+            currentTetromino.setSmoothOffset(
+                    smoothOffset
             );
 
-            for (int r = 0;
-                 r < currentPiece.length;
-                 r++) {
-
-                for (int c = 0;
-                     c < currentPiece[r].length;
-                     c++) {
-
-                    if (
-                            currentPiece[r][c] == 0
-                    ) {
-
-                        continue;
-                    }
-
-                    double x =
-                            (pieceCol + c)
-                                    * BLOCK;
-
-                    /*
-                     * pieceRow + smoothOffset allows the piece
-                     * to visibly move between two adjacent rows.
-                     */
-                    double y =
-                            (
-                                    pieceRow +
-                                            r +
-                                            smoothOffset
-                            ) * BLOCK;
-
-                    gc.fillRect(
-                            x + 1,
-                            y + 1,
-                            BLOCK - 2,
-                            BLOCK - 2
-                    );
-
-                    gc.setStroke(Color.WHITE);
-
-                    gc.strokeRect(
-                            x + 1,
-                            y + 1,
-                            BLOCK - 2,
-                            BLOCK - 2
-                    );
-                }
-            }
+            currentTetromino.draw(gc);
         }
 
         // Draw the pause overlay
