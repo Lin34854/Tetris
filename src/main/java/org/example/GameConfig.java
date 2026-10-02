@@ -9,4 +9,15 @@ public record GameConfig(
         boolean aiPlayEnabled,
         boolean extendedModeEnabled
 ) {
+    public static GameConfig defaultConfig() {
+        return new GameConfig(
+                10,
+                20,
+                1,
+                false,
+                false,
+                false,
+                false
+        );
+    }
 }
