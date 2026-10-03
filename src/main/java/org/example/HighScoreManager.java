@@ -47,14 +47,18 @@ public class HighScoreManager {
 
     public boolean qualifies(int score) {
 
+        if (score < 0) {
+            return false;
+        }
+
         List<HighScore> topScores =
                 getTopScores();
 
-        return score > 0 &&
-                (topScores.size() < 10 ||
-                        score > topScores.get(
-                                topScores.size() - 1
-                        ).score());
+        if (topScores.size() < 10) {
+            return true;
+        }
+
+        return score > topScores.get(9).score();
     }
 
     public void addScore(
@@ -85,6 +89,15 @@ public class HighScoreManager {
 
     public void clearScores() {
         scores.clear();
+
+        try {
+            Files.deleteIfExists(scorePath);
+        } catch (IOException exception) {
+            System.out.println(
+                    "Unable to clear high scores file."
+            );
+        }
+
         saveScores();
     }
 

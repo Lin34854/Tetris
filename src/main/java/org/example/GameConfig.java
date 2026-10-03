@@ -7,7 +7,7 @@ public record GameConfig(
         boolean musicEnabled,
         boolean soundEnabled,
         boolean aiPlayEnabled,
-        boolean extendedModeEnabled
+        boolean twoPlayerEnabled
 ) {
     public static GameConfig defaultConfig() {
         return new GameConfig(

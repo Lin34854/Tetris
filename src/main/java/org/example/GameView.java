@@ -23,10 +23,18 @@ public class GameView {
     private final Stage stage;
 
     private Canvas gameCanvas;
-    private Label playerLabel;
-    private Label levelLabel;
-    private Label scoreLabel;
-    private Label linesLabel;
+    private Canvas secondGameCanvas;
+    private Canvas player1NextCanvas;
+    private Canvas player2NextCanvas;
+
+    private Label player1LevelLabel;
+    private Label player1ScoreLabel;
+    private Label player1LinesLabel;
+
+    private Label player2LevelLabel;
+    private Label player2ScoreLabel;
+    private Label player2LinesLabel;
+
     private Label musicLabel;
     private Label soundLabel;
 
@@ -223,8 +231,8 @@ public class GameView {
         CheckBox aiPlay =
                 new CheckBox("AI Play");
 
-        CheckBox extendedMode =
-                new CheckBox("Extended Mode");
+        CheckBox twoPlayer =
+                new CheckBox("Two Player");
 
         music.setSelected(
                 config.musicEnabled()
@@ -238,8 +246,12 @@ public class GameView {
                 config.aiPlayEnabled()
         );
 
-        extendedMode.setSelected(
-                config.extendedModeEnabled()
+        twoPlayer.setSelected(
+                config.twoPlayerEnabled()
+        );
+
+        Label modeHelp = new Label(
+                "AI Play adds an AI opponent. Two Player adds a second human player."
         );
 
         Button backButton =
@@ -267,7 +279,7 @@ public class GameView {
                             music.isSelected(),
                             sound.isSelected(),
                             aiPlay.isSelected(),
-                            extendedMode.isSelected()
+                            twoPlayer.isSelected()
                     );
 
             saveAction.accept(updatedConfig);
@@ -283,7 +295,8 @@ public class GameView {
                 music,
                 sound,
                 aiPlay,
-                extendedMode,
+                twoPlayer,
+                modeHelp,
                 backButton
         );
 
@@ -291,7 +304,7 @@ public class GameView {
         root.setPadding(new Insets(30));
 
         Scene scene =
-                new Scene(root, 700, 500);
+                new Scene(root, 700, 560);
 
         stage.setScene(scene);
         stage.sizeToScene();
@@ -377,7 +390,9 @@ public class GameView {
     }
 
     public Scene showGame(
-            GameModel model,
+            GameModel player1,
+            GameModel player2,
+            boolean player2Ai,
             Runnable backAction,
             boolean musicEnabled,
             boolean soundEnabled
@@ -385,26 +400,94 @@ public class GameView {
 
         gameCanvas =
                 new Canvas(
-                        model.getCols() *
-                                model.getBlockSize(),
-                        model.getRows() *
-                                model.getBlockSize()
+                        player1.getCols() *
+                                player1.getBlockSize(),
+                        player1.getRows() *
+                                player1.getBlockSize()
                 );
 
-        playerLabel =
-                new Label("Player: Human");
+        player1NextCanvas =
+                new Canvas(96, 72);
 
-        levelLabel =
-                new Label(
-                        "Level: " +
-                                model.getLevel()
-                );
+        player2NextCanvas = null;
+        secondGameCanvas = null;
 
-        scoreLabel =
+        if (player2 != null) {
+            secondGameCanvas =
+                    new Canvas(
+                            player2.getCols() *
+                                    player2.getBlockSize(),
+                            player2.getRows() *
+                                    player2.getBlockSize()
+                    );
+
+            player2NextCanvas =
+                    new Canvas(96, 72);
+        }
+
+        player1LevelLabel =
+                new Label("Level: " + player1.getLevel());
+
+        player1ScoreLabel =
                 new Label("Score: 0");
 
-        linesLabel =
+        player1LinesLabel =
                 new Label("Lines: 0");
+
+        VBox player1Box =
+                createPlayerBox(
+                        "PLAYER 1 - HUMAN",
+                        player1LevelLabel,
+                        player1ScoreLabel,
+                        player1LinesLabel,
+                        gameCanvas,
+                        player1NextCanvas,
+                        player2 == null
+                                ? "← → Move   ↑ Rotate   ↓ Down"
+                                : "A/D Move   W Rotate   X Down"
+                );
+
+        HBox boards;
+
+        if (player2 != null) {
+
+            player2LevelLabel =
+                    new Label("Level: " + player2.getLevel());
+
+            player2ScoreLabel =
+                    new Label("Score: 0");
+
+            player2LinesLabel =
+                    new Label("Lines: 0");
+
+            VBox player2Box =
+                    createPlayerBox(
+                            player2Ai
+                                    ? "PLAYER 2 - AI"
+                                    : "PLAYER 2 - HUMAN",
+                            player2LevelLabel,
+                            player2ScoreLabel,
+                            player2LinesLabel,
+                            secondGameCanvas,
+                            player2NextCanvas,
+                            player2Ai
+                                    ? "AI Controlled"
+                                    : "←/→ Move   ↑ Rotate   ↓ Down"
+                    );
+
+            boards =
+                    new HBox(
+                            30,
+                            player1Box,
+                            player2Box
+                    );
+
+        } else {
+            boards =
+                    new HBox(player1Box);
+        }
+
+        boards.setAlignment(Pos.CENTER);
 
         musicLabel =
                 new Label(
@@ -418,21 +501,17 @@ public class GameView {
                                 (soundEnabled ? "On" : "Off")
                 );
 
-        HBox gameDetails =
+        HBox audioStatus =
                 new HBox(
                         20,
-                        playerLabel,
-                        levelLabel,
-                        scoreLabel,
-                        linesLabel,
                         musicLabel,
                         soundLabel
                 );
 
-        gameDetails.setAlignment(Pos.CENTER);
+        audioStatus.setAlignment(Pos.CENTER);
 
         Label controls = new Label(
-                "← → Move   ↑ Rotate   ↓ Down   P Pause   M Music   S Sound"
+                "P Pause   M Music   S Sound"
         );
 
         Button backButton =
@@ -441,26 +520,36 @@ public class GameView {
         backButton.setOnAction(
                 event -> backAction.run()
         );
+        backButton.setFocusTraversable(false);
 
         VBox root = new VBox(
                 10,
-                gameDetails,
-                gameCanvas,
+                audioStatus,
+                boards,
                 controls,
                 backButton
         );
 
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(10));
+        root.setFocusTraversable(true);
+
+        double boardWidth =
+                gameCanvas.getWidth();
+
+        if (secondGameCanvas != null) {
+            boardWidth +=
+                    secondGameCanvas.getWidth() + 80;
+        }
 
         double sceneWidth =
                 Math.max(
                         500,
-                        gameCanvas.getWidth() + 80
+                        boardWidth + 100
                 );
 
         double sceneHeight =
-                gameCanvas.getHeight() + 135;
+                gameCanvas.getHeight() + 260;
 
         Scene scene =
                 new Scene(
@@ -473,44 +562,188 @@ public class GameView {
         stage.sizeToScene();
         stage.centerOnScreen();
 
-        drawGame(model);
+        drawGames(player1, player2);
 
         root.requestFocus();
 
         return scene;
     }
 
-    public void drawGame(GameModel model) {
+    private VBox createPlayerBox(
+            String titleText,
+            Label levelLabel,
+            Label scoreLabel,
+            Label linesLabel,
+            Canvas canvas,
+            Canvas nextCanvas,
+            String controlsText
+    ) {
 
-        if (gameCanvas == null) {
+        Label title =
+                new Label(titleText);
+
+        title.setStyle(
+                "-fx-font-size: 18px;" +
+                        "-fx-font-weight: bold;"
+        );
+
+        HBox details =
+                new HBox(
+                        15,
+                        levelLabel,
+                        scoreLabel,
+                        linesLabel
+                );
+
+        details.setAlignment(Pos.CENTER);
+
+        Label nextLabel =
+                new Label("Next:");
+
+        HBox nextBox =
+                new HBox(
+                        8,
+                        nextLabel,
+                        nextCanvas
+                );
+
+        nextBox.setAlignment(Pos.CENTER);
+
+        Label playerControls =
+                new Label(controlsText);
+
+        VBox box =
+                new VBox(
+                        8,
+                        title,
+                        details,
+                        nextBox,
+                        canvas,
+                        playerControls
+                );
+
+        box.setAlignment(Pos.CENTER);
+
+        return box;
+    }
+
+    public void drawGames(
+            GameModel player1,
+            GameModel player2
+    ) {
+
+        if (player1 != null && gameCanvas != null) {
+            player1LevelLabel.setText(
+                    "Level: " + player1.getLevel()
+            );
+            player1ScoreLabel.setText(
+                    "Score: " + player1.getScore()
+            );
+            player1LinesLabel.setText(
+                    "Lines: " + player1.getLinesErased()
+            );
+
+            drawNextPiece(
+                    player1NextCanvas,
+                    player1
+            );
+            drawPlayer(gameCanvas, player1);
+        }
+
+        if (player2 != null && secondGameCanvas != null) {
+            player2LevelLabel.setText(
+                    "Level: " + player2.getLevel()
+            );
+            player2ScoreLabel.setText(
+                    "Score: " + player2.getScore()
+            );
+            player2LinesLabel.setText(
+                    "Lines: " + player2.getLinesErased()
+            );
+
+            drawNextPiece(
+                    player2NextCanvas,
+                    player2
+            );
+            drawPlayer(secondGameCanvas, player2);
+        }
+    }
+
+    private void drawNextPiece(
+            Canvas canvas,
+            GameModel model
+    ) {
+
+        if (canvas == null || model == null) {
             return;
         }
 
-        scoreLabel.setText(
-                "Score: " +
-                        model.getScore()
+        GraphicsContext gc =
+                canvas.getGraphicsContext2D();
+
+        gc.setFill(Color.rgb(30, 30, 30));
+        gc.fillRect(
+                0,
+                0,
+                canvas.getWidth(),
+                canvas.getHeight()
         );
 
-        linesLabel.setText(
-                "Lines: " +
-                        model.getLinesErased()
+        int[][] shape =
+                model.getNextPieceShape();
+
+        int previewBlock = 18;
+        double pieceWidth =
+                shape[0].length * previewBlock;
+        double pieceHeight =
+                shape.length * previewBlock;
+
+        double startX =
+                (canvas.getWidth() - pieceWidth) / 2;
+        double startY =
+                (canvas.getHeight() - pieceHeight) / 2;
+
+        gc.setFill(
+                model.getNextPieceColor()
         );
 
-        levelLabel.setText(
-                "Level: " +
-                        model.getLevel()
-        );
+        for (int row = 0;
+             row < shape.length;
+             row++) {
+
+            for (int col = 0;
+                 col < shape[row].length;
+                 col++) {
+
+                if (shape[row][col] == 0) {
+                    continue;
+                }
+
+                gc.fillRect(
+                        startX + col * previewBlock + 1,
+                        startY + row * previewBlock + 1,
+                        previewBlock - 2,
+                        previewBlock - 2
+                );
+            }
+        }
+    }
+
+    private void drawPlayer(
+            Canvas canvas,
+            GameModel model
+    ) {
 
         GraphicsContext gc =
-                gameCanvas.getGraphicsContext2D();
+                canvas.getGraphicsContext2D();
 
         gc.setFill(Color.BLACK);
 
         gc.fillRect(
                 0,
                 0,
-                gameCanvas.getWidth(),
-                gameCanvas.getHeight()
+                canvas.getWidth(),
+                canvas.getHeight()
         );
 
         int[][] board =
@@ -583,6 +816,7 @@ public class GameView {
 
         if (model.isPaused()) {
             drawOverlay(
+                    canvas,
                     gc,
                     "PAUSED",
                     Color.WHITE
@@ -591,6 +825,7 @@ public class GameView {
 
         if (model.isGameOver()) {
             drawOverlay(
+                    canvas,
                     gc,
                     "GAME OVER",
                     Color.RED
@@ -599,6 +834,7 @@ public class GameView {
     }
 
     private void drawOverlay(
+            Canvas canvas,
             GraphicsContext gc,
             String text,
             Color color
@@ -616,21 +852,21 @@ public class GameView {
         gc.fillRect(
                 0,
                 0,
-                gameCanvas.getWidth(),
-                gameCanvas.getHeight()
+                canvas.getWidth(),
+                canvas.getHeight()
         );
 
         gc.setFill(color);
-        gc.setFont(Font.font(30));
+        gc.setFont(Font.font(28));
 
         double textX =
                 Math.max(
                         20,
-                        gameCanvas.getWidth() / 2 - 90
+                        canvas.getWidth() / 2 - 90
                 );
 
         double textY =
-                gameCanvas.getHeight() / 2;
+                canvas.getHeight() / 2;
 
         gc.fillText(
                 text,
@@ -640,19 +876,29 @@ public class GameView {
     }
 
     public Optional<String> requestPlayerName(
+            String player,
             int score
     ) {
 
         TextInputDialog dialog =
-                new TextInputDialog("Player");
+                new TextInputDialog(player);
 
         dialog.setTitle("New High Score");
         dialog.setHeaderText(
-                "Score: " + score
+                player + " Score: " + score
         );
         dialog.setContentText(
                 "Enter your name:"
         );
+        dialog.initOwner(stage);
+
+        dialog.setOnShown(event -> {
+            TextField input =
+                    dialog.getEditor();
+
+            input.selectAll();
+            input.requestFocus();
+        });
 
         return dialog.showAndWait();
     }
@@ -708,6 +954,7 @@ public class GameView {
     public void close() {
         stage.close();
     }
+
     public void updateAudioStatus(
             boolean musicEnabled,
             boolean soundEnabled
@@ -727,5 +974,4 @@ public class GameView {
             );
         }
     }
-
 }

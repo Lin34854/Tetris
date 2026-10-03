@@ -2,8 +2,6 @@ package org.example;
 
 import javafx.scene.paint.Color;
 
-import java.util.Random;
-
 public class GameModel {
 
     private static final int DEFAULT_BLOCK = 30;
@@ -24,6 +22,8 @@ public class GameModel {
 
     private boolean paused;
     private boolean gameOver;
+    private boolean aiControlled;
+    private boolean aiMoveComplete;
 
     private long lastDropTime;
     private double smoothOffset;
@@ -31,12 +31,20 @@ public class GameModel {
     private int score;
     private int linesErased;
     private int level = 1;
+    private int pieceIndex;
 
-    private final Random random =
-            new Random();
+    private PieceSequence pieceSequence =
+            new PieceSequence();
 
     public void reset(GameConfig config) {
+        reset(config, new PieceSequence(), false);
+    }
 
+    public void reset(
+            GameConfig config,
+            PieceSequence sequence,
+            boolean aiControlled
+    ) {
         cols = config.fieldWidth();
         rows = config.fieldHeight();
         level = config.level();
@@ -47,10 +55,14 @@ public class GameModel {
 
         paused = false;
         gameOver = false;
+        this.aiControlled = aiControlled;
+        aiMoveComplete = false;
         lastDropTime = 0;
         smoothOffset = 0;
         score = 0;
         linesErased = 0;
+        pieceIndex = 0;
+        pieceSequence = sequence;
 
         spawnPiece();
     }
@@ -59,6 +71,10 @@ public class GameModel {
 
         if (paused || gameOver) {
             return;
+        }
+
+        if (aiControlled) {
+            aiPlay();
         }
 
         if (lastDropTime == 0) {
@@ -123,11 +139,25 @@ public class GameModel {
         lastDropTime = 0;
     }
 
-    public void moveHorizontal(int direction) {
-
-        if (paused || gameOver) {
+    public void setPaused(boolean paused) {
+        if (gameOver) {
             return;
         }
+
+        this.paused = paused;
+        lastDropTime = 0;
+    }
+
+    public void moveHorizontal(int direction) {
+
+        if (paused || gameOver || aiControlled) {
+            return;
+        }
+
+        moveHorizontalInternal(direction);
+    }
+
+    private void moveHorizontalInternal(int direction) {
 
         int newCol =
                 pieceCol + direction;
@@ -149,7 +179,7 @@ public class GameModel {
 
     public void manualMoveDown() {
 
-        if (paused || gameOver) {
+        if (paused || gameOver || aiControlled) {
             return;
         }
 
@@ -183,31 +213,12 @@ public class GameModel {
 
     public void rotatePiece() {
 
-        if (paused || gameOver) {
+        if (paused || gameOver || aiControlled) {
             return;
         }
 
-        int pieceRows =
-                currentPiece.length;
-
-        int pieceCols =
-                currentPiece[0].length;
-
         int[][] rotated =
-                new int[pieceCols][pieceRows];
-
-        for (int r = 0;
-             r < pieceRows;
-             r++) {
-
-            for (int c = 0;
-                 c < pieceCols;
-                 c++) {
-
-                rotated[c][pieceRows - 1 - r] =
-                        currentPiece[r][c];
-            }
-        }
+                rotateMatrix(currentPiece);
 
         if (canMove(
                 rotated,
@@ -225,49 +236,18 @@ public class GameModel {
 
     private void spawnPiece() {
 
+        aiMoveComplete = false;
+
         int type =
-                random.nextInt(7);
+                pieceSequence.getPieceType(
+                        pieceIndex++
+                );
 
         currentPieceType =
                 type + 1;
 
         currentPiece =
-                switch (type) {
-
-                    case 0 -> new int[][]{
-                            {1, 1, 1, 1}
-                    };
-
-                    case 1 -> new int[][]{
-                            {1, 1},
-                            {1, 1}
-                    };
-
-                    case 2 -> new int[][]{
-                            {0, 1, 0},
-                            {1, 1, 1}
-                    };
-
-                    case 3 -> new int[][]{
-                            {1, 0, 0},
-                            {1, 1, 1}
-                    };
-
-                    case 4 -> new int[][]{
-                            {0, 0, 1},
-                            {1, 1, 1}
-                    };
-
-                    case 5 -> new int[][]{
-                            {0, 1, 1},
-                            {1, 1, 0}
-                    };
-
-                    default -> new int[][]{
-                            {1, 1, 0},
-                            {0, 1, 1}
-                    };
-                };
+                createPiece(type);
 
         pieceRow = 0;
 
@@ -285,6 +265,9 @@ public class GameModel {
                         blockSize
                 );
 
+        smoothOffset = 0;
+        lastDropTime = 0;
+
         if (!canMove(
                 currentPiece,
                 pieceRow,
@@ -292,6 +275,38 @@ public class GameModel {
         )) {
             gameOver = true;
         }
+    }
+
+    private int[][] createPiece(int type) {
+        return switch (type) {
+            case 0 -> new int[][]{
+                    {1, 1, 1, 1}
+            };
+            case 1 -> new int[][]{
+                    {1, 1},
+                    {1, 1}
+            };
+            case 2 -> new int[][]{
+                    {0, 1, 0},
+                    {1, 1, 1}
+            };
+            case 3 -> new int[][]{
+                    {1, 0, 0},
+                    {1, 1, 1}
+            };
+            case 4 -> new int[][]{
+                    {0, 0, 1},
+                    {1, 1, 1}
+            };
+            case 5 -> new int[][]{
+                    {0, 1, 1},
+                    {1, 1, 0}
+            };
+            default -> new int[][]{
+                    {1, 1, 0},
+                    {0, 1, 1}
+            };
+        };
     }
 
     private boolean canMove(
@@ -445,9 +460,301 @@ public class GameModel {
 
     private long getDropInterval() {
 
-        return 800_000_000L -
-                (level - 1) *
-                        70_000_000L;
+        return Math.max(
+                100_000_000L,
+                800_000_000L -
+                        (level - 1) *
+                                70_000_000L
+        );
+    }
+
+    private int[][] rotateMatrix(int[][] piece) {
+
+        int rows =
+                piece.length;
+
+        int cols =
+                piece[0].length;
+
+        int[][] rotated =
+                new int[cols][rows];
+
+        for (int r = 0;
+             r < rows;
+             r++) {
+
+            for (int c = 0;
+                 c < cols;
+                 c++) {
+
+                rotated[c][rows - 1 - r] =
+                        piece[r][c];
+            }
+        }
+
+        return rotated;
+    }
+
+    private int[][] copyPiece(int[][] piece) {
+
+        int[][] copy =
+                new int[piece.length][];
+
+        for (int r = 0;
+             r < piece.length;
+             r++) {
+
+            copy[r] =
+                    piece[r].clone();
+        }
+
+        return copy;
+    }
+
+    private void aiPlay() {
+
+        if (
+                !aiControlled ||
+                        aiMoveComplete ||
+                        gameOver ||
+                        currentPiece == null
+        ) {
+            return;
+        }
+
+        int bestScore =
+                Integer.MIN_VALUE;
+
+        int bestCol =
+                pieceCol;
+
+        int[][] bestPiece =
+                copyPiece(currentPiece);
+
+        for (int rotation = 0;
+             rotation < 4;
+             rotation++) {
+
+            int[][] testPiece =
+                    copyPiece(currentPiece);
+
+            for (int r = 0;
+                 r < rotation;
+                 r++) {
+
+                testPiece =
+                        rotateMatrix(testPiece);
+            }
+
+            int maxCol =
+                    cols - testPiece[0].length;
+
+            for (int col = 0;
+                 col <= maxCol;
+                 col++) {
+
+                int testRow = 0;
+
+                if (!canMove(
+                        testPiece,
+                        testRow,
+                        col
+                )) {
+                    continue;
+                }
+
+                while (canMove(
+                        testPiece,
+                        testRow + 1,
+                        col
+                )) {
+                    testRow++;
+                }
+
+                int positionScore =
+                        evaluatePosition(
+                                testPiece,
+                                testRow,
+                                col
+                        );
+
+                if (positionScore > bestScore) {
+
+                    bestScore = positionScore;
+                    bestCol = col;
+                    bestPiece =
+                            copyPiece(testPiece);
+                }
+            }
+        }
+
+        currentPiece =
+                copyPiece(bestPiece);
+
+        currentTetromino.setShape(
+                currentPiece
+        );
+
+        while (pieceCol < bestCol) {
+            moveHorizontalInternal(1);
+        }
+
+        while (pieceCol > bestCol) {
+            moveHorizontalInternal(-1);
+        }
+
+        aiMoveComplete = true;
+    }
+
+    private int evaluatePosition(
+            int[][] piece,
+            int row,
+            int col
+    ) {
+
+        int[][] testBoard =
+                new int[rows][cols];
+
+        for (int r = 0;
+             r < rows;
+             r++) {
+
+            System.arraycopy(
+                    board[r],
+                    0,
+                    testBoard[r],
+                    0,
+                    cols
+            );
+        }
+
+        for (int r = 0;
+             r < piece.length;
+             r++) {
+
+            for (int c = 0;
+                 c < piece[r].length;
+                 c++) {
+
+                if (piece[r][c] == 0) {
+                    continue;
+                }
+
+                int boardRow =
+                        row + r;
+
+                int boardCol =
+                        col + c;
+
+                if (
+                        boardRow >= 0 &&
+                                boardRow < rows &&
+                                boardCol >= 0 &&
+                                boardCol < cols
+                ) {
+                    testBoard[boardRow][boardCol] = 1;
+                }
+            }
+        }
+
+        int evaluation = 0;
+        int completedRows = 0;
+
+        for (int r = 0;
+             r < rows;
+             r++) {
+
+            boolean full = true;
+
+            for (int c = 0;
+                 c < cols;
+                 c++) {
+
+                if (testBoard[r][c] == 0) {
+                    full = false;
+                    break;
+                }
+            }
+
+            if (full) {
+                completedRows++;
+            }
+        }
+
+        evaluation +=
+                completedRows * 1000;
+
+        int[] heights =
+                new int[cols];
+
+        for (int c = 0;
+             c < cols;
+             c++) {
+
+            for (int r = 0;
+                 r < rows;
+                 r++) {
+
+                if (testBoard[r][c] != 0) {
+                    heights[c] = rows - r;
+                    break;
+                }
+            }
+        }
+
+        int holes = 0;
+
+        for (int c = 0;
+             c < cols;
+             c++) {
+
+            boolean foundBlock = false;
+
+            for (int r = 0;
+                 r < rows;
+                 r++) {
+
+                if (testBoard[r][c] != 0) {
+                    foundBlock = true;
+                } else if (foundBlock) {
+                    holes++;
+                }
+            }
+        }
+
+        evaluation -= holes * 100;
+
+        int totalHeight = 0;
+        int maxHeight = 0;
+
+        for (int height : heights) {
+            totalHeight += height;
+            maxHeight =
+                    Math.max(
+                            maxHeight,
+                            height
+                    );
+        }
+
+        evaluation -= totalHeight * 3;
+        evaluation -= maxHeight * 5;
+
+        int bumpiness = 0;
+
+        for (int c = 0;
+             c < cols - 1;
+             c++) {
+
+            bumpiness +=
+                    Math.abs(
+                            heights[c] -
+                                    heights[c + 1]
+                    );
+        }
+
+        evaluation -= bumpiness * 8;
+
+        return evaluation;
     }
 
     public Color getPieceColor(int type) {
@@ -460,7 +767,7 @@ public class GameModel {
             case 5 -> Color.ORANGE;
             case 6 -> Color.LIMEGREEN;
             case 7 -> Color.RED;
-            default -> Color.GRAY;
+            default -> Color.WHITE;
         };
     }
 
@@ -470,6 +777,19 @@ public class GameModel {
 
     public Tetromino getCurrentTetromino() {
         return currentTetromino;
+    }
+
+    public int[][] getNextPieceShape() {
+        return createPiece(
+                pieceSequence.getPieceType(pieceIndex)
+        );
+    }
+
+    public Color getNextPieceColor() {
+        int nextType =
+                pieceSequence.getPieceType(pieceIndex) + 1;
+
+        return getPieceColor(nextType);
     }
 
     public double getSmoothOffset() {
@@ -482,6 +802,10 @@ public class GameModel {
 
     public boolean isGameOver() {
         return gameOver;
+    }
+
+    public boolean isAiControlled() {
+        return aiControlled;
     }
 
     public int getScore() {

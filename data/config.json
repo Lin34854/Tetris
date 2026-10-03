@@ -1,9 +1,9 @@
 {
   "fieldWidth": 10,
   "fieldHeight": 20,
-  "level": 2,
+  "level": 10,
   "musicEnabled": true,
-  "soundEnabled": true,
-  "aiPlayEnabled": false,
-  "extendedModeEnabled": false
+  "soundEnabled": false,
+  "aiPlayEnabled": true,
+  "twoPlayerEnabled": false
 }
